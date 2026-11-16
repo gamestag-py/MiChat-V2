@@ -43,6 +43,7 @@ const wss = new WebSocket.Server({
     maxPayload: 1024 * 1024
 });
 
+let expiryCleanupTimer = null;
 
 server.on('upgrade', async (request, socket, head) => {
 
@@ -467,6 +468,105 @@ async function markConversationSeen(userId, withId) {
 }
 
 
+
+let expirySweepRunning = false;
+
+async function deleteExpiredMessages() {
+
+    // Prevent overlapping database cleanup jobs.
+    if (expirySweepRunning) return;
+
+    expirySweepRunning = true;
+
+    let connection;
+
+    try {
+        connection = await db.getConnection();
+
+        await connection.beginTransaction();
+
+        // Find messages whose expiry time has passed.
+        const [expiredMessages] = await connection.execute(
+            `SELECT
+                msg_id,
+                incoming_msg_id,
+                outgoing_msg_id
+             FROM messages
+             WHERE expires_at IS NOT NULL
+               AND expires_at <= NOW()
+             ORDER BY expires_at ASC
+             LIMIT 500
+             FOR UPDATE`
+        );
+
+        if (expiredMessages.length === 0) {
+            await connection.commit();
+            return;
+        }
+
+        // Delete expired messages from the database.
+        const messageIds = expiredMessages.map(msg => msg.msg_id);
+
+        const placeholders = messageIds.map(() => '?').join(',');
+
+        await connection.execute(
+            `DELETE FROM messages
+             WHERE msg_id IN (${placeholders})`,
+            messageIds
+        );
+
+        await connection.commit();
+
+        // Notify both participants after successful deletion.
+        for (const msg of expiredMessages) {
+
+            const notification = {
+                type: 'message_expired',
+                msg_id: msg.msg_id,
+                incoming_id: msg.incoming_msg_id,
+                outgoing_id: msg.outgoing_msg_id
+            };
+
+            for (const [clientWs, connectedClient] of clients.entries()) {
+
+                const userId = Number(connectedClient.userId);
+
+                if (
+                    userId === Number(msg.incoming_msg_id) ||
+                    userId === Number(msg.outgoing_msg_id)
+                ) {
+                    send(clientWs, notification);
+                }
+            }
+        }
+
+        console.log(
+            `Deleted ${expiredMessages.length} expired messages`
+        );
+
+    } catch (error) {
+
+        if (connection) {
+            try {
+                await connection.rollback();
+            } catch (rollbackError) {
+                console.error('Expiry rollback failed:', rollbackError);
+            }
+        }
+
+        console.error('Expired message cleanup error:', error);
+
+    } finally {
+
+        if (connection) {
+            connection.release();
+        }
+
+        expirySweepRunning = false;
+    }
+}
+
+
 async function handleMessage(ws, rawData) {
     let msg;
 
@@ -798,15 +898,15 @@ async function handleMessage(ws, rawData) {
                     receiver: currentId
                 };
 
-                    for (const [clientWs, connectedClient] of clients.entries()) {
-                        if (
-                            Number(connectedClient.userId) ===
-                            Number(withId)
-                        ) {
-                            send(clientWs, notification);
-                        }
+                for (const [clientWs, connectedClient] of clients.entries()) {
+                    if (
+                        Number(connectedClient.userId) ===
+                        Number(withId)
+                    ) {
+                        send(clientWs, notification);
                     }
-                
+                }
+
 
             } catch (error) {
                 console.error('Mark all seen error:', error);
@@ -867,18 +967,34 @@ wss.on('connection', (ws, request) => {
     });
 });
 
+
+
 async function startServer() {
     try {
-        // Verify MySQL and create the message table if it does not exist.
+
         await db.query('SELECT 1');
+
+        await deleteExpiredMessages();
+
+        expiryCleanupTimer = setInterval(() => {
+            deleteExpiredMessages();
+        }, 1000);
+
+        expiryCleanupTimer.unref();
 
         server.listen(PORT, () => {
             console.log(`HTTP server: http://5.189.157.103:${PORT}`);
             console.log(`WebSocket:   ws://5.189.157.103:${PORT}`);
             console.log('MySQL connected');
+            console.log('Message expiry service running');
         });
+
     } catch (error) {
-        console.error('Startup failed. Check your MySQL configuration:', error.message);
+        console.error(
+            'Startup failed. Check your MySQL configuration:',
+            error.message
+        );
+
         process.exit(1);
     }
 }
@@ -888,6 +1004,11 @@ async function shutdown() {
 
     for (const ws of wss.clients) {
         ws.close(1001, 'Server shutting down');
+    }
+
+    if (expiryCleanupTimer) {
+        clearInterval(expiryCleanupTimer);
+        expiryCleanupTimer = null;
     }
 
     wss.close();

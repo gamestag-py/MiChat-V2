@@ -348,7 +348,9 @@ window.initChat = async function (root) {
                 messageElement.className = isSender
                     ? "chat outgoing"
                     : "chat incoming";
-
+                if (msg.msg_id) {
+                    messageElement.dataset.msgId = msg.msg_id;
+                }
                 if (!isSender) {
 
                     const img = document.createElement("img");
@@ -599,12 +601,46 @@ window.initChat = async function (root) {
                 if (receiver == incoming_id) {
                     const element = document.querySelector(`[data-msg-id="${message_id}"]`);
                     const tick = element?.querySelector(".details .message-status");
-                    console.log(element);
                     if (tick) {
                         tick.textContent = "✓✓";
                         tick.style.letterSpacing = '-3px';
                     }
                 }
+                break;
+            }
+
+            case "message_expired": {
+
+                const messageId = Number(data.msg_id);
+
+                if (!Number.isSafeInteger(messageId) || messageId <= 0) {
+                    break;
+                }
+
+                // Find the exact message in the currently open conversation.
+                const messageElement = chatBox.querySelector(
+                    `.chat[data-msg-id="${messageId}"]`
+                );
+
+                if (messageElement) {
+
+                    // Remove immediately without refreshing.
+                    messageElement.remove();
+
+                    console.log("Message expired and removed:", messageId);
+                }
+
+                // Show empty state if no messages remain.
+                if (!chatBox.querySelector(".chat")) {
+
+                    const empty = document.createElement("div");
+
+                    empty.className = "text";
+                    empty.textContent = "No messages yet. Start a conversation.";
+
+                    chatBox.appendChild(empty);
+                }
+
                 break;
             }
 
