@@ -149,6 +149,24 @@ window.initChat = async function (root) {
         }
 
         details.appendChild(paragraph);
+        if (isSender) {
+            details.style.position = "relative";
+            details.style.paddingBottom = "15px";
+
+            const tick = document.createElement("span");
+            tick.classList.add('message-status');
+
+            tick.style.cssText = `position: absolute;right: 5px;bottom: 14px;display: block;text-align: right;font-size: 12px;letter-spacing: -3px;`;
+            // Sent: single grey tick
+            tick.textContent = "✓";
+            tick.style.color = "#9ca3af";
+            tick.style.letterSpacing = "normal";
+            tick.classList.add('status-sent');
+
+
+            details.appendChild(tick);
+        }
+        details.style.position = 'relative'
         messageElement.appendChild(details);
 
         if (!chatBox.isConnected) return;
@@ -378,7 +396,7 @@ window.initChat = async function (root) {
                     details.style.paddingBottom = "15px";
 
                     const tick = document.createElement("span");
-
+                    tick.classList.add('message-status');
                     tick.style.cssText = `position: absolute;right: 5px;bottom: 14px;display: block;text-align: right;font-size: 12px;letter-spacing: -3px;`;
 
                     if (msg.seen_at) {
@@ -556,20 +574,39 @@ window.initChat = async function (root) {
                 break;
 
             case 'message_seen':
-                let receiver= data.receiver;
-                if (receiver == incoming_id){
+                let receiver = data.receiver;
+                if (receiver == incoming_id) {
                     document.querySelectorAll('.status-delivered').forEach(element => {
                         element.classList.add('status-seen');
                         element.classList.remove('status-delivered');
                         element.style.color = 'rgb(83, 189, 235)';
+                        element.textContent = '✓✓';
+                        element.style.letterSpacing = '-3px';
                     });
                     document.querySelectorAll('.status-sent').forEach(element => {
                         element.classList.add('status-seen');
                         element.classList.remove('status-sent');
                         element.style.color = 'rgb(83, 189, 235)';
+                        element.textContent = '✓✓';
+                        element.style.letterSpacing = '-3px';
                     });
                 }
                 break;
+
+            case 'message_delivered': {
+                let message_id = data.message;
+                let receiver = data.receiver;
+                if (receiver == incoming_id) {
+                    const element = document.querySelector(`[data-msg-id="${message_id}"]`);
+                    const tick = element?.querySelector(".details .message-status");
+                    console.log(element);
+                    if (tick) {
+                        tick.textContent = "✓✓";
+                        tick.style.letterSpacing = '-3px';
+                    }
+                }
+                break;
+            }
 
             case "error":
                 console.error("WebSocket error:", data.message);
