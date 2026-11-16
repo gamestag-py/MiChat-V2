@@ -124,7 +124,7 @@ The following steps assume XAMPP on Windows. Adapt the document-root and databas
 Clone the repository into your web server's document root. For XAMPP, an example location is:
 
 ```text
-C:\xampp\htdocs\MiChat
+https://github.com/gamestag-py/MiChat-V2
 ```
 
 Start Apache and MySQL from the XAMPP control panel. Open the PHP application at:
@@ -309,4 +309,4 @@ This section is important. The project demonstrates client-side encryption, but 
 
 ## License
 
-No license file was included in the supplied source snapshot. Add a `LICENSE` file before granting permission for others to use, modify, or distribute the project.
+free open-source. Feel free to contribute

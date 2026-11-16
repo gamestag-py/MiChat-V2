@@ -65,7 +65,7 @@ $result = mysqli_stmt_get_result($stmt);
 $user = mysqli_fetch_assoc($result);
 mysqli_stmt_close($stmt);
 
-if (!$user || !hash_equals($user['password'], md5($currentPassword))) {
+if (!$user || !password_verify($currentPassword, $user['password'])) {
     echo json_encode([
         "success" => false,
         "message" => "Current password is incorrect."
@@ -73,7 +73,7 @@ if (!$user || !hash_equals($user['password'], md5($currentPassword))) {
     exit;
 }
 
-$newPasswordHash = md5($newPassword);
+$newPasswordHash = password_hash($newPassword, PASSWORD_DEFAULT);
 
 $stmt = mysqli_prepare(
     $conn,

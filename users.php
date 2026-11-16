@@ -584,6 +584,14 @@ include_once "header.php";
 
       document.getElementById("disappearPicker").style.display = "none";
     }
+
+    document.addEventListener("click", () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(console.error);
+      }
+    }, {
+      once: false
+    });
   </script>
 
   <script src="javascript/users.js"></script>
